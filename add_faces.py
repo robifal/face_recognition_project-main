@@ -2,14 +2,21 @@ import cv2
 import pickle
 import numpy as np
 import os
+import dlib  # Importando o Dlib
 
+# Inicializando a captura de vídeo
 video = cv2.VideoCapture(0)
-facedetect = cv2.CascadeClassifier('data/haarcascade_frontalface_default.xml')
+
+# Inicializando o detector de rostos do Dlib
+detector = dlib.get_frontal_face_detector()
 
 faces_data = []
 i = 0
 
 name = input("Digite seu nome: ")
+
+# Contador de fotos tiradas
+num_photos_taken = 0
 
 while True:
     ret, frame = video.read()
@@ -20,22 +27,36 @@ while True:
         break
     
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = facedetect.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+
+    # Detecção de rostos com o Dlib
+    faces = detector(gray)
     
     print(f"Faces detectadas: {len(faces)}")  # Depuração: verifique quantas faces estão sendo detectadas
     
-    for (x, y, w, h) in faces:
+    for face in faces:
+        # Dlib retorna um retângulo para a face detectada
+        x, y, w, h = (face.left(), face.top(), face.width(), face.height())
+        
         crop_img = frame[y:y+h, x:x+w, :]
         resized_img = cv2.resize(crop_img, (100, 100))  # Aumentei o tamanho da imagem
+        
+        # Captura de uma nova foto a cada 10 iterações
         if len(faces_data) <= 20 and i % 10 == 0:
             faces_data.append(resized_img)
+            num_photos_taken += 1  # Atualiza o contador de fotos tiradas
+
         i += 1
-        cv2.putText(frame, str(len(faces_data)), (50, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (50, 50, 255), 1)
+        # Exibindo o número de fotos tiradas e a quantidade de faces detectadas
+        cv2.putText(frame, f"Fotos tiradas: {num_photos_taken}", (50, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (50, 50, 255), 1)
+        cv2.putText(frame, str(len(faces_data)), (50, 80), cv2.FONT_HERSHEY_COMPLEX, 1, (50, 50, 255), 1)
         cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 255), 1)
     
+    # Exibindo a imagem com a detecção de rosto
     cv2.imshow("Frame", frame)
+    
     k = cv2.waitKey(1)
     
+    # Condição para finalizar o processo (pressionar 'q' ou capturar 20 fotos)
     if k == ord('q') or len(faces_data) == 20:
         break
 
@@ -67,3 +88,7 @@ else:
     faces = np.append(faces, faces_data, axis=0)
     with open('data/faces_data.pkl', 'wb') as f:
         pickle.dump(faces, f)
+
+print(f"Total de fotos tiradas: {num_photos_taken}")
+
+
