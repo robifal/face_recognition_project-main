@@ -1,4 +1,5 @@
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
 import cv2
 import pickle
 import numpy as np
@@ -27,6 +28,10 @@ print('Shape of Faces matrix --> ', FACES.shape)
 
 # Ajustando o número de rótulos para o número de faces (se necessário)
 LABELS = LABELS[:FACES.shape[0]]
+
+# Normalização dos dados
+scaler = StandardScaler()
+FACES = scaler.fit_transform(FACES)
 
 # Inicializa o classificador KNN
 knn = KNeighborsClassifier(n_neighbors=5)
