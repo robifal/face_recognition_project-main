@@ -33,7 +33,7 @@ knn = KNeighborsClassifier(n_neighbors=5)
 knn.fit(FACES, LABELS)
 
 # Carregar a imagem de fundo
-imgBackground = cv2.imread("background.png")  # imagem do fundo
+# imgBackground = cv2.imread("background.png")  # imagem do fundo
 COL_NAMES = ['NAME', 'TIME']
 
 while True:
@@ -53,6 +53,7 @@ while True:
         # Redimensionando a imagem da face e fazendo a predição com KNN
         resized_img = cv2.resize(crop_img, (50, 50)).flatten().reshape(1, -1)
         output = knn.predict(resized_img)
+        label = output[0] if output[0] in LABELS else "Desconhecido"
         
         # Obtendo o timestamp
         ts = time.time()
@@ -68,12 +69,12 @@ while True:
         cv2.rectangle(frame, (x, y - 40), (x + w, y), (50, 50, 255), -1)
         cv2.putText(frame, str(output[0]), (x, y - 15), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 1)
         
-        attendance = [str(output[0]), str(timestamp)]
+        attendance = [label, timestamp]
 
     # Ajustando o tamanho do frame de vídeo e aplicando no fundo
     frame_resized = cv2.resize(frame, (640, 480))
-    imgBackground[162:162 + 480, 55:55 + 640] = frame_resized
-    cv2.imshow("Frame", imgBackground)  # Exibindo a imagem do fundo
+    # imgBackground[162:162 + 480, 55:55 + 640] = frame_resized
+    cv2.imshow("Frame", frame)  # Exibindo a imagem do fundo, possibilidade de trocar "frame" por "background"
 
     # Ações de gravação de presença
     k = cv2.waitKey(1)
