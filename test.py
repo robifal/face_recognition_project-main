@@ -57,8 +57,20 @@ while True:
         
         # Redimensionando a imagem da face e fazendo a predição com KNN
         resized_img = cv2.resize(crop_img, (50, 50)).flatten().reshape(1, -1)
-        output = knn.predict(resized_img)
-        label = output[0] if output[0] in LABELS else "Desconhecido"
+        distances, indices = knn.kneighbors(resized_img)
+        
+        # Verificando a distância média para determinar a confiança
+        avg_distance = np.mean(distances)
+
+        # Define um limiar de confiança, que pode ser ajustado conforme necessário
+        threshold = 50  # Esse valor pode ser ajustado para o seu caso
+
+        if avg_distance < threshold:
+            # Se a distância média for abaixo do limiar, aceitamos a predição
+            label = LABELS[indices[0][0]]
+        else:
+            # Se a distância média for maior que o limiar, consideramos o rosto como "Desconhecido"
+            label = "Desconhecido"
         
         # Obtendo o timestamp
         ts = time.time()
@@ -72,7 +84,7 @@ while True:
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
         cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 255), 2)
         cv2.rectangle(frame, (x, y - 40), (x + w, y), (50, 50, 255), -1)
-        cv2.putText(frame, str(output[0]), (x, y - 15), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 1)
+        cv2.putText(frame, label, (x, y - 15), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 1)
         
         attendance = [label, timestamp]
 

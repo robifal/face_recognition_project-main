@@ -1,4 +1,4 @@
-import cv2
+import cv2 
 import pickle
 import numpy as np
 import os
@@ -38,11 +38,12 @@ while True:
         x, y, w, h = (face.left(), face.top(), face.width(), face.height())
         
         crop_img = frame[y:y+h, x:x+w, :]
-        resized_img = cv2.resize(crop_img, (100, 100))  # Aumentei o tamanho da imagem
+        resized_img = cv2.resize(crop_img, (50, 50))  # Ajustei para 50x50 pixels
         
         # Captura de uma nova foto a cada 10 iterações
-        if len(faces_data) <= 20 and i % 10 == 0:
-            faces_data.append(resized_img)
+        if len(faces_data) < 20 and i % 10 == 0:
+            # Achata a imagem para um vetor 1D de 2500 elementos (50x50 pixels)
+            faces_data.append(resized_img.flatten())
             num_photos_taken += 1  # Atualiza o contador de fotos tiradas
 
         i += 1
@@ -63,8 +64,8 @@ while True:
 video.release()
 cv2.destroyAllWindows()
 
+# Convertendo para um array numpy
 faces_data = np.asarray(faces_data)
-faces_data = faces_data.reshape(20, -1)
 
 # Atualiza o arquivo de nomes
 if 'names.pkl' not in os.listdir('data/'):
@@ -85,6 +86,7 @@ if 'faces_data.pkl' not in os.listdir('data/'):
 else:
     with open('data/faces_data.pkl', 'rb') as f:
         faces = pickle.load(f)
+    # Concatenando as novas faces de forma segura
     faces = np.append(faces, faces_data, axis=0)
     with open('data/faces_data.pkl', 'wb') as f:
         pickle.dump(faces, f)
