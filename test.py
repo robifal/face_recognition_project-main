@@ -56,14 +56,14 @@ while True:
         crop_img = frame[y:y + h, x:x + w, :]
         
         # Redimensionando a imagem da face e fazendo a predição com KNN
-        resized_img = cv2.resize(crop_img, (150, 150)).flatten().reshape(1, -1)
+        resized_img = cv2.resize(crop_img, (50, 50)).flatten().reshape(1, -1)
         distances, indices = knn.kneighbors(resized_img)
         
         # Verificando a distância média para determinar a confiança
         avg_distance = np.mean(distances)
 
         # Define um limiar de confiança, que pode ser ajustado conforme necessário
-        threshold = 50  # Esse valor pode ser ajustado para o seu caso
+        threshold = 30 # Esse valor pode ser ajustado para o seu caso
 
         if avg_distance < threshold:
             # Se a distância média for abaixo do limiar, aceitamos a predição

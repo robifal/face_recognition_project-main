@@ -26,7 +26,7 @@ def load_data(filename, default_value):
     return default_value
 
 # Função para capturar rostos
-def capture_faces(name, num_samples=5):
+def capture_faces(name, num_samples=20):
     video = cv2.VideoCapture(0)
     if not video.isOpened():
         print("Erro: Não foi possível acessar a câmera.")
@@ -49,7 +49,7 @@ def capture_faces(name, num_samples=5):
         for face in faces:
             x, y, w, h = (face.left(), face.top(), face.width(), face.height())
             crop_img = frame[y:y+h, x:x+w, :]
-            resized_img = cv2.resize(crop_img, (150, 150))
+            resized_img = cv2.resize(crop_img, (50, 50))
             
             if len(faces_data) < num_samples and i % 10 == 0:
                 faces_data.append(resized_img.flatten())
