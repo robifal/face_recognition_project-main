@@ -56,7 +56,7 @@ while True:
         crop_img = frame[y:y + h, x:x + w, :]
         
         # Redimensionando a imagem da face e fazendo a predição com KNN
-        resized_img = cv2.resize(crop_img, (50, 50)).flatten().reshape(1, -1)
+        resized_img = cv2.resize(crop_img, (150, 150)).flatten().reshape(1, -1)
         distances, indices = knn.kneighbors(resized_img)
         
         # Verificando a distância média para determinar a confiança

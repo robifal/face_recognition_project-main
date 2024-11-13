@@ -1,96 +1,92 @@
-import cv2 
+import cv2
 import pickle
 import numpy as np
 import os
-import dlib  # Importando o Dlib
+import dlib
 
-# Inicializando a captura de vídeo
-video = cv2.VideoCapture(0)
+# Configuração do diretório de dados
+DATA_DIR = 'data'
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
-# Inicializando o detector de rostos do Dlib
-detector = dlib.get_frontal_face_detector()
+# Função para salvar dados com pickle
+def save_data(filename, data):
+    with open(os.path.join(DATA_DIR, filename), 'wb') as f:
+        pickle.dump(data, f)
 
-faces_data = []
-i = 0
+# Função para carregar dados com pickle
+def load_data(filename, default_value):
+    path = os.path.join(DATA_DIR, filename)
+    if os.path.isfile(path):
+        with open(path, 'rb') as f:
+            try:
+                return pickle.load(f)
+            except EOFError:
+                pass  # Retorna o valor padrão se o arquivo estiver vazio
+    return default_value
 
-name = input("Digite seu nome: ")
-
-# Contador de fotos tiradas
-num_photos_taken = 0
-
-while True:
-    ret, frame = video.read()
+# Função para capturar rostos
+def capture_faces(name, num_samples=5):
+    video = cv2.VideoCapture(0)
+    if not video.isOpened():
+        print("Erro: Não foi possível acessar a câmera.")
+        return
     
-    # Verifica se o vídeo foi capturado corretamente
-    if not ret:
-        print("Falha ao capturar o vídeo")
-        break
-    
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    detector = dlib.get_frontal_face_detector()
+    faces_data = []
+    num_photos_taken = 0
+    i = 0
 
-    # Detecção de rostos com o Dlib
-    faces = detector(gray)
-    
-    print(f"Faces detectadas: {len(faces)}")  # Depuração: verifique quantas faces estão sendo detectadas
-    
-    for face in faces:
-        # Dlib retorna um retângulo para a face detectada
-        x, y, w, h = (face.left(), face.top(), face.width(), face.height())
+    while True:
+        ret, frame = video.read()
+        if not ret:
+            print("Falha ao capturar o vídeo")
+            break
         
-        crop_img = frame[y:y+h, x:x+w, :]
-        resized_img = cv2.resize(crop_img, (50, 50))  # Ajustei para 50x50 pixels
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = detector(gray)
         
-        # Captura de uma nova foto a cada 10 iterações
-        if len(faces_data) < 20 and i % 10 == 0:
-            # Achata a imagem para um vetor 1D de 2500 elementos (50x50 pixels)
-            faces_data.append(resized_img.flatten())
-            num_photos_taken += 1  # Atualiza o contador de fotos tiradas
+        for face in faces:
+            x, y, w, h = (face.left(), face.top(), face.width(), face.height())
+            crop_img = frame[y:y+h, x:x+w, :]
+            resized_img = cv2.resize(crop_img, (150, 150))
+            
+            if len(faces_data) < num_samples and i % 10 == 0:
+                faces_data.append(resized_img.flatten())
+                num_photos_taken += 1
 
-        i += 1
-        # Exibindo o número de fotos tiradas e a quantidade de faces detectadas
-        cv2.putText(frame, f"Fotos tiradas: {num_photos_taken}", (50, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (50, 50, 255), 1)
-        cv2.putText(frame, str(len(faces_data)), (50, 80), cv2.FONT_HERSHEY_COMPLEX, 1, (50, 50, 255), 1)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 255), 1)
+            i += 1
+            # Atualiza o frame com informações
+            cv2.putText(frame, f"Fotos tiradas: {num_photos_taken}", (50, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (50, 50, 255), 1)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 255), 1)
+
+        cv2.imshow("Frame", frame)
+        if cv2.waitKey(1) == ord('q') or len(faces_data) == num_samples:
+            break
+
+    video.release()
+    cv2.destroyAllWindows()
+    return np.asarray(faces_data), num_photos_taken
+
+# Função para atualizar os arquivos de dados
+def update_files(name, faces_data):
+    names = load_data('names.pkl', [])
+    names.extend([name] * faces_data.shape[0])
+    save_data('names.pkl', names)
     
-    # Exibindo a imagem com a detecção de rosto
-    cv2.imshow("Frame", frame)
-    
-    k = cv2.waitKey(1)
-    
-    # Condição para finalizar o processo (pressionar 'q' ou capturar 20 fotos)
-    if k == ord('q') or len(faces_data) == 20:
-        break
-
-video.release()
-cv2.destroyAllWindows()
-
-# Convertendo para um array numpy
-faces_data = np.asarray(faces_data)
-
-# Atualiza o arquivo de nomes
-if 'names.pkl' not in os.listdir('data/'):
-    names = [name] * 20
-    with open('data/names.pkl', 'wb') as f:
-        pickle.dump(names, f)
-else:
-    with open('data/names.pkl', 'rb') as f:
-        names = pickle.load(f)
-    names += [name] * 20
-    with open('data/names.pkl', 'wb') as f:
-        pickle.dump(names, f)
-
-# Atualiza o arquivo de faces
-if 'faces_data.pkl' not in os.listdir('data/'):
-    with open('data/faces_data.pkl', 'wb') as f:
-        pickle.dump(faces_data, f)
-else:
-    with open('data/faces_data.pkl', 'rb') as f:
-        faces = pickle.load(f)
-    # Concatenando as novas faces de forma segura
+    faces = load_data('faces_data.pkl', np.empty((0, faces_data.shape[1])))
     faces = np.append(faces, faces_data, axis=0)
-    with open('data/faces_data.pkl', 'wb') as f:
-        pickle.dump(faces, f)
+    save_data('faces_data.pkl', faces)
 
-print(f"Total de fotos tiradas: {num_photos_taken}")
+# Execução principal
+name = input("Digite seu nome: ")
+faces_data, num_photos_taken = capture_faces(name)
+
+if faces_data is not None:
+    update_files(name, faces_data)
+    print(f"Total de fotos tiradas: {num_photos_taken}")
+else:
+    print("Nenhuma foto foi tirada.")
+
 
 
