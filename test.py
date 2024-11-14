@@ -54,16 +54,17 @@ while True:
 
         # Recorte da face detectada
         crop_img = frame[y:y + h, x:x + w, :]
-        
+
         # Redimensionando a imagem da face e fazendo a predição com KNN
         resized_img = cv2.resize(crop_img, (50, 50)).flatten().reshape(1, -1)
+        resized_img = scaler.transform(resized_img)
         distances, indices = knn.kneighbors(resized_img)
-        
+
         # Verificando a distância média para determinar a confiança
         avg_distance = np.mean(distances)
 
         # Define um limiar de confiança, que pode ser ajustado conforme necessário
-        threshold = 30 # Esse valor pode ser ajustado para o seu caso
+        threshold = 10 # Esse valor pode ser ajustado para o seu caso
 
         if avg_distance < threshold:
             # Se a distância média for abaixo do limiar, aceitamos a predição
@@ -71,21 +72,21 @@ while True:
         else:
             # Se a distância média for maior que o limiar, consideramos o rosto como "Desconhecido"
             label = "Desconhecido"
-        
+
         # Obtendo o timestamp
         ts = time.time()
         date = datetime.fromtimestamp(ts).strftime("%d-%m-%Y")
         timestamp = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
-        
+
         # Verificando se o arquivo de presença já existe
         exist = os.path.isfile("Attendance/Attendance_" + date + ".csv")
-        
+
         # Desenhando o retângulo ao redor do rosto
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
         cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 255), 2)
         cv2.rectangle(frame, (x, y - 40), (x + w, y), (50, 50, 255), -1)
         cv2.putText(frame, label, (x, y - 15), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 1)
-        
+
         attendance = [label, timestamp]
 
     # Ajustando o tamanho do frame de vídeo e aplicando no fundo
@@ -109,6 +110,9 @@ while True:
 
     if k == ord('q'):  # Quando pressionado 'q', sai
         break
+
+    # print("Dados de FACES carregados:", FACES[:5])  # Ver primeiros cinco exemplos
+    # print("LABELS carregados:", LABELS[:5])
 
 video.release()
 cv2.destroyAllWindows()
