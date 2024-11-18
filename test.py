@@ -1,118 +1,107 @@
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler
 import cv2
-import pickle
-import numpy as np
 import os
-import csv
-import time
-from datetime import datetime
-import dlib
+import numpy as np
+import face_recognition
+import mediapipe as mp
 
-# Inicializa o vídeo
-video = cv2.VideoCapture(0)
 
-# Carrega o classificador Haar (já existente)
-facedetect = cv2.CascadeClassifier('data/haarcascade_frontalface_default.xml')
+# Configuração dos diretórios
+KNOWN_FACES_DIR = 'data/known_faces'
 
-# Inicializa o detector de rostos do dlib (alternativa)
-detector = dlib.get_frontal_face_detector()
+if not os.path.exists(KNOWN_FACES_DIR):
+    os.makedirs(KNOWN_FACES_DIR)
 
-# Carregar os dados de faces e rótulos
-with open('data/names.pkl', 'rb') as w:
-    LABELS = pickle.load(w)
-with open('data/faces_data.pkl', 'rb') as f:
-    FACES = pickle.load(f)
 
-print('Shape of Faces matrix --> ', FACES.shape)
+# Função para carregar os rostos conhecidos e suas características faciais
+def load_known_faces():
+    known_faces = {}
+    for filename in os.listdir(KNOWN_FACES_DIR):
+        if filename.endswith('.jpg'):
+            name = filename.split('_')[0]  # Nome antes do "_X.jpg"
+            img_path = os.path.join(KNOWN_FACES_DIR, filename)
+            img = cv2.imread(img_path)
 
-# Ajustando o número de rótulos para o número de faces (se necessário)
-LABELS = LABELS[:FACES.shape[0]]
+            # Usando face_recognition para encontrar as características faciais
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            face_encodings = face_recognition.face_encodings(img_rgb)
 
-# Normalização dos dados
-scaler = StandardScaler()
-FACES = scaler.fit_transform(FACES)
+            if face_encodings:
+                known_faces[name] = face_encodings[0]  # Usando a primeira face encontrada
+            else:
+                print(f"Não foi possível encontrar um rosto em {filename}.")
+    return known_faces
 
-# Inicializa o classificador KNN
-knn = KNeighborsClassifier(n_neighbors=5)
-knn.fit(FACES, LABELS)
 
-# Carregar a imagem de fundo
-# imgBackground = cv2.imread("background.png")  # imagem do fundo
-COL_NAMES = ['NAME', 'TIME']
+# Função para capturar rostos e identificá-los
+def capture_and_identify_faces():
+    mp_face_detection = mp.solutions.face_detection
+    video = cv2.VideoCapture(0)
+    if not video.isOpened():
+        print("Erro: Não foi possível acessar a câmera.")
+        return
 
-while True:
-    ret, frame = video.read()
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Carrega os rostos conhecidos
+    known_faces = load_known_faces()
 
-    # Usando o detector dlib para detectar rostos (alternativa ao Haar Cascade)
-    faces = detector(gray)
+    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
+        while True:
+            ret, frame = video.read()
+            if not ret:
+                print("Falha ao capturar o vídeo")
+                break
 
-    for face in faces:
-        # Usando as coordenadas do dlib para desenhar o retângulo ao redor do rosto
-        x, y, w, h = (face.left(), face.top(), face.width(), face.height())
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = face_detection.process(rgb_frame)
 
-        # Recorte da face detectada
-        crop_img = frame[y:y + h, x:x + w, :]
+            if results.detections:
+                for detection in results.detections:
+                    bboxC = detection.location_data.relative_bounding_box
+                    h, w, _ = frame.shape
+                    x, y, w_box, h_box = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
 
-        # Redimensionando a imagem da face e fazendo a predição com KNN
-        resized_img = cv2.resize(crop_img, (50, 50)).flatten().reshape(1, -1)
-        resized_img = scaler.transform(resized_img)
-        distances, indices = knn.kneighbors(resized_img)
+                    # Coordenadas dentro dos limites
+                    x, y = max(x, 0), max(y, 0)
+                    w_box, h_box = min(w_box, w - x), min(h_box, h - y)
 
-        # Verificando a distância média para determinar a confiança
-        avg_distance = np.mean(distances)
+                    # Recorte do rosto
+                    crop_img = frame[y:y + h_box, x:x + w_box]
+                    if crop_img.size == 0:
+                        continue
 
-        # Define um limiar de confiança, que pode ser ajustado conforme necessário
-        threshold = 10 # Esse valor pode ser ajustado para o seu caso
+                    # Usando face_recognition para extrair as características faciais do rosto capturado
+                    rgb_crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
+                    face_encodings = face_recognition.face_encodings(rgb_crop_img)
 
-        if avg_distance < threshold:
-            # Se a distância média for abaixo do limiar, aceitamos a predição
-            label = LABELS[indices[0][0]]
-        else:
-            # Se a distância média for maior que o limiar, consideramos o rosto como "Desconhecido"
-            label = "Desconhecido"
+                    if face_encodings:
+                        captured_face_encoding = face_encodings[0]
 
-        # Obtendo o timestamp
-        ts = time.time()
-        date = datetime.fromtimestamp(ts).strftime("%d-%m-%Y")
-        timestamp = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+                        # Comparar com rostos conhecidos usando a distância cosseno
+                        min_distance = float('inf')
+                        name = "Desconhecido"
+                        for known_name, known_face_encoding in known_faces.items():
+                            distance = np.linalg.norm(known_face_encoding - captured_face_encoding)
+                            if distance < min_distance:
+                                min_distance = distance
+                                name = known_name
 
-        # Verificando se o arquivo de presença já existe
-        exist = os.path.isfile("Attendance/Attendance_" + date + ".csv")
+                        # Se o rosto for desconhecido
+                        if min_distance > 0.6:  # Ajuste do limite de distância
+                            name = "Desconhecido"
 
-        # Desenhando o retângulo ao redor do rosto
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 1)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (50, 50, 255), 2)
-        cv2.rectangle(frame, (x, y - 40), (x + w, y), (50, 50, 255), -1)
-        cv2.putText(frame, label, (x, y - 15), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 1)
+                        # Caixa de detecção e nome
+                        color = (0, 255, 0) if name != "Desconhecido" else (0, 0, 255)
+                        cv2.putText(frame, f"Nome: {name}", (x, y - 10), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 1)
+                        cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), color, 2)
 
-        attendance = [label, timestamp]
+            # Exibe o frame
+            cv2.imshow("Frame", frame)
 
-    # Ajustando o tamanho do frame de vídeo e aplicando no fundo
-    frame_resized = cv2.resize(frame, (640, 480))
-    # imgBackground[162:162 + 480, 55:55 + 640] = frame_resized
-    cv2.imshow("Frame", frame)  # Exibindo a imagem do fundo, possibilidade de trocar "frame" por "background"
+            if cv2.waitKey(1) == ord('q'):
+                break
 
-    # Ações de gravação de presença
-    k = cv2.waitKey(1)
-    if k == ord('o'):  # Quando pressionado 'o', registra a presença
-        time.sleep(5)
-        if exist:
-            with open("Attendance/Attendance_" + date + ".csv", "+a") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(attendance)
-        else:
-            with open("Attendance/Attendance_" + date + ".csv", "+a") as csvfile:
-                writer = csv.writer(csvfile)
-                writer.writerow(COL_NAMES)
-                writer.writerow(attendance)
+        video.release()
+        cv2.destroyAllWindows()
 
-    if k == ord('q'):  # Quando pressionado 'q', sai
-        break
-
-    # print("Dados de FACES carregados:", FACES[:5])  # Ver primeiros cinco exemplos
-    # print("LABELS carregados:", LABELS[:5])
-
-video.release()
-cv2.destroyAllWindows()
+# Execução principal
+if __name__ == "__main__":
+    capture_and_identify_faces()

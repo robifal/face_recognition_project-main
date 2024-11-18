@@ -2,16 +2,13 @@ import cv2
 import pickle
 import numpy as np
 import os
-import mediapipe as mp
+import face_recognition
 
 # Configuração dos diretórios
 KNOWN_FACES_DIR = 'data/known_faces'
-UNKNOWN_FACES_DIR = 'data/unknown_faces'
 
 if not os.path.exists(KNOWN_FACES_DIR):
     os.makedirs(KNOWN_FACES_DIR)
-if not os.path.exists(UNKNOWN_FACES_DIR):
-    os.makedirs(UNKNOWN_FACES_DIR)
 
 # Função para salvar dados com pickle
 def save_data(filename, data):
@@ -28,102 +25,121 @@ def load_data(filename, default_value):
             return default_value
     return default_value
 
-# Função para capturar rostos usando mediapipe
-def capture_faces():
-    mp_face_detection = mp.solutions.face_detection
+# Função para capturar e salvar 20 fotos de uma pessoa
+def capture_faces_for_person(name):
     video = cv2.VideoCapture(0)
     if not video.isOpened():
         print("Erro: Não foi possível acessar a câmera.")
         return
 
-    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
-        unknown_counter = 1  # Contador para rostos desconhecidos
-        known_faces = load_data('known_faces.pkl', {})
-        known_face_counts = load_data('known_face_counts.pkl', {})
+    photo_count = 0
+    while photo_count < 20:
+        ret, frame = video.read()
+        if not ret:
+            print("Falha ao capturar o vídeo")
+            break
 
-        # Carrega rostos conhecidos da pasta KNOWN_FACES_DIR
-        for filename in os.listdir(KNOWN_FACES_DIR):
-            if filename.endswith('.jpg'):
-                name = filename.split('_')[0]  # Nome do arquivo antes do "_1.jpg"
-                img_path = os.path.join(KNOWN_FACES_DIR, filename)
-                img = cv2.imread(img_path)
-                resized_img = cv2.resize(img, (100, 100))  # Redimensiona para 100x100
-                known_faces[name] = resized_img.flatten()
+        # Converte a imagem para RGB, que é o formato esperado pelo face_recognition
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        while True:
-            ret, frame = video.read()
-            if not ret:
-                print("Falha ao capturar o vídeo")
-                break
+        # Usa o face_recognition para localizar os rostos
+        face_locations = face_recognition.face_locations(rgb_frame)
 
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = face_detection.process(rgb_frame)
+        # Se houver rostos detectados
+        if face_locations:
+            for face_location in face_locations:
+                top, right, bottom, left = face_location
 
-            if results.detections:
-                for detection in results.detections:
-                    bboxC = detection.location_data.relative_bounding_box
-                    h, w, _ = frame.shape
-                    x, y, w_box, h_box = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
+                # Recorta a região do rosto detectado
+                crop_img = frame[top:bottom, left:right]
+                if crop_img.size == 0:
+                    continue
 
-                    # Coordenadas dentro dos limites
-                    x, y = max(x, 0), max(y, 0)
-                    w_box, h_box = min(w_box, w - x), min(h_box, h - y)
+                # Redimensiona para garantir um bom tamanho e salvar
+                img_resized = cv2.resize(crop_img, (250, 250))  # Tamanho maior para melhorar a captura
+                filename = os.path.join(KNOWN_FACES_DIR, f"{name}_{photo_count}.jpg")
+                cv2.imwrite(filename, img_resized)
+                photo_count += 1
 
-                    # Recorte do rosto
-                    crop_img = frame[y:y + h_box, x:x + w_box]
-                    if crop_img.size == 0:
-                        continue
+                # Exibe o rosto detectado
+                color = (0, 255, 0)
+                cv2.putText(frame, f"Capturando {name}", (left, top - 10), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 1)
+                cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
 
-                    resized_img = cv2.resize(crop_img, (100, 100))
-                    flattened_img = resized_img.flatten()
+        # Exibe o frame
+        cv2.imshow("Captura de Fotos", frame)
 
-                    # Comparar com rostos conhecidos
-                    min_distance = float('inf')
-                    name = "Desconhecido"
-                    for known_name, known_face in known_faces.items():
-                        distance = np.linalg.norm(known_face - flattened_img)
-                        if distance < min_distance:
-                            min_distance = distance
-                            name = known_name
+        if cv2.waitKey(1) == ord('q'):
+            break
 
-                    # Considerar rosto desconhecido se distância for grande
-                    if min_distance > 90:
-                        name = f"Desconhecido_{unknown_counter}"
+    video.release()
+    cv2.destroyAllWindows()
 
-                        # Armazena até 20 fotos para um novo rosto desconhecido
-                        if name not in known_face_counts:
-                            known_face_counts[name] = 0
+    print(f"Captura de fotos para {name} concluída. {photo_count} fotos salvas.")
 
-                        if known_face_counts[name] < 20:
-                            # Salva na pasta de rostos desconhecidos
-                            cv2.imwrite(f"{UNKNOWN_FACES_DIR}/{name}_{known_face_counts[name]}.jpg", crop_img)
-                            known_face_counts[name] += 1
-                        else:
-                            unknown_counter += 1  # Incrementa para próximo rosto desconhecido
-                    else:
-                        # Nome do rosto reconhecido
-                        if name not in known_face_counts:
-                            known_face_counts[name] = 1  # Marca rosto conhecido
+# Função para capturar rostos e classificá-los
+def capture_faces():
+    video = cv2.VideoCapture(0)
+    if not video.isOpened():
+        print("Erro: Não foi possível acessar a câmera.")
+        return
 
-                    # Caixa de detecção e nome
-                    color = (0, 255, 0) if min_distance <= 90 else (0, 0, 255)
-                    cv2.putText(frame, f"Nome: {name}", (x, y - 10), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 1)
-                    cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), color, 2)
+    known_faces = load_data('data/known_faces.pkl', {})
 
-            # Salvar dados após cada iteração
-            save_data('known_faces.pkl', known_faces)
-            save_data('known_face_counts.pkl', known_face_counts)
+    while True:
+        ret, frame = video.read()
+        if not ret:
+            print("Falha ao capturar o vídeo")
+            break
 
-            # Exibe o frame
-            cv2.imshow("Frame", frame)
+        # Converte a imagem para RGB, que é o formato esperado pelo face_recognition
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            if cv2.waitKey(1) == ord('q'):
-                break
+        # Detecta os rostos usando face_recognition
+        face_locations = face_recognition.face_locations(rgb_frame)
 
-        video.release()
-        cv2.destroyAllWindows()
+        if face_locations:
+            for face_location in face_locations:
+                top, right, bottom, left = face_location
+
+                # Recorta o rosto detectado
+                crop_img = frame[top:bottom, left:right]
+                if crop_img.size == 0:
+                    continue
+
+                resized_img = cv2.resize(crop_img, (250, 250))
+                flattened_img = resized_img.flatten()
+
+                # Comparar com rostos conhecidos
+                min_distance = float('inf')
+                name = "Desconhecido"
+                for known_name, known_face in known_faces.items():
+                    distance = np.linalg.norm(known_face - flattened_img)
+                    if distance < min_distance:
+                        min_distance = distance
+                        name = known_name
+
+                # Caixa de detecção e nome
+                color = (0, 255, 0) if min_distance <= 90 else (0, 0, 255)
+                cv2.putText(frame, f"Nome: {name}", (left, top - 10), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 1)
+                cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+
+        # Salvar os rostos conhecidos
+        save_data('data/known_faces.pkl', known_faces)
+
+        # Exibe o frame
+        cv2.imshow("Frame", frame)
+
+        if cv2.waitKey(1) == ord('q'):
+            break
+
+    video.release()
+    cv2.destroyAllWindows()
 
 # Execução principal
 if __name__ == "__main__":
-    capture_faces()
+    name = input("Digite o nome da pessoa para capturar as fotos: ")
+    capture_faces_for_person(name)  # Captura as fotos da pessoa
+    capture_faces()  # Inicia a captura e identificação de rostos no vídeo
     print("Captura de rostos concluída.")
+
