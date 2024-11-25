@@ -4,7 +4,6 @@ import numpy as np
 import face_recognition
 import mediapipe as mp
 
-
 # Configuração dos diretórios
 KNOWN_FACES_DIR = 'data/known_faces'
 
