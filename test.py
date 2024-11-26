@@ -87,10 +87,34 @@ def capture_and_identify_faces():
                         if min_distance > 0.6:  # Ajuste do limite de distância
                             name = "Desconhecido"
 
-                        # Caixa de detecção e nome
                         color = (0, 255, 0) if name != "Desconhecido" else (0, 0, 255)
-                        cv2.putText(frame, f"Nome: {name}", (x, y - 10), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 1)
-                        cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), color, 2)
+                        # Define a posição do texto (abaixo do rosto)
+                        text = f"Nome: {name}"
+                        (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_COMPLEX, 1, 1)
+                        text_x, text_y = x, y + h_box + text_height + 10  # Ajuste o deslocamento conforme necessário
+                        
+                        # Desenha a caixinha (fundo para o texto)
+                        cv2.rectangle(
+                            frame, 
+                            (text_x - 5, text_y - text_height - 5),  # Posição superior esquerda
+                            (text_x + text_width + 5, text_y + 5),  # Posição inferior direita
+                            color, 
+                            cv2.FILLED
+                        )
+                        
+                        # Desenha o texto em cima da caixinha
+                        cv2.putText(
+                            frame, 
+                            text, 
+                            (text_x, text_y), 
+                            cv2.FONT_HERSHEY_COMPLEX, 
+                            1, 
+                            (255, 255, 255),  # Cor do texto
+                            1
+                        )
+                        
+                        # Desenha o retângulo em volta do rosto
+                        cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), color, 2)                        
 
             # Exibe o frame
             cv2.imshow("Frame", frame)
