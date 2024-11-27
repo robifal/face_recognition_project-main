@@ -1,4 +1,4 @@
-import cv2 
+import cv2
 import os
 import numpy as np
 import face_recognition
@@ -9,7 +9,6 @@ KNOWN_FACES_DIR = 'data/known_faces'
 
 if not os.path.exists(KNOWN_FACES_DIR):
     os.makedirs(KNOWN_FACES_DIR)
-
 
 # Função para carregar os rostos conhecidos e suas características faciais
 def load_known_faces():
@@ -30,18 +29,32 @@ def load_known_faces():
                 print(f"Não foi possível encontrar um rosto em {filename}.")
     return known_faces
 
+# Função para criar o painel com o feed da câmera e a foto identificada
+def create_panel(frame, name):
+    person_image_path = os.path.join(KNOWN_FACES_DIR, f"{name}.jpg")
+    if os.path.exists(person_image_path):
+        person_image = cv2.imread(person_image_path)
+        person_image = cv2.resize(person_image, (200, 200))  # Ajuste o tamanho da foto
+        panel_height = max(frame.shape[0], 200)
+        panel_width = frame.shape[1] + 200
+        panel = np.zeros((panel_height, panel_width, 3), dtype=np.uint8)
+        panel[:frame.shape[0], :frame.shape[1]] = frame
+        panel[:200, frame.shape[1]:] = person_image
+        return panel
+    return frame
 
-# Função para capturar rostos e identificá-los
+# Função para capturar e processar os frames
 def capture_and_identify_faces():
-    mp_face_detection = mp.solutions.face_detection
-    video = cv2.VideoCapture(0)
+    video = cv2.VideoCapture("/dev/video0")  # Aqui você usa o dispositivo de captura já configurado com ffmpeg
     if not video.isOpened():
-        print("Erro: Não foi possível acessar a câmera.")
+        print("Erro ao acessar a câmera")
         return
 
     # Carrega os rostos conhecidos
     known_faces = load_known_faces()
 
+    # Criação do detector de faces com MediaPipe
+    mp_face_detection = mp.solutions.face_detection
     with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
         while True:
             ret, frame = video.read()
@@ -54,11 +67,10 @@ def capture_and_identify_faces():
 
             if results.detections:
                 for detection in results.detections:
+                    # Obtém as coordenadas da face
                     bboxC = detection.location_data.relative_bounding_box
                     h, w, _ = frame.shape
                     x, y, w_box, h_box = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
-
-                    # Coordenadas dentro dos limites
                     x, y = max(x, 0), max(y, 0)
                     w_box, h_box = min(w_box, w - x), min(h_box, h - y)
 
@@ -67,7 +79,7 @@ def capture_and_identify_faces():
                     if crop_img.size == 0:
                         continue
 
-                    # Usando face_recognition para extrair as características faciais do rosto capturado
+                    # Usando face_recognition para extrair as características faciais
                     rgb_crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
                     face_encodings = face_recognition.face_encodings(rgb_crop_img)
 
@@ -116,6 +128,9 @@ def capture_and_identify_faces():
 
                         # Desenha o retângulo em volta do rosto
                         cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), color, 2)
+
+                        # Cria o painel com a foto da pessoa ao lado
+                        frame = create_panel(frame, name)
 
             # Exibe o frame
             cv2.imshow("Frame", frame)
