@@ -130,7 +130,7 @@ def capture_and_identify_faces():
                         cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), color, 2)
 
                         # Cria o painel com a foto da pessoa ao lado
-                        frame = create_panel(frame, name)
+                frame = create_panel(frame, name)
 
             # Exibe o frame
             cv2.imshow("Frame", frame)
