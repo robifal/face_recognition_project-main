@@ -49,6 +49,7 @@ def capture_and_identify_faces():
 
     # Carrega os rostos conhecidos
     known_faces, known_names = load_known_faces()
+    recognition_log = {name: [] for name in known_names}
 
     while True:
         ret, frame = video.read()
@@ -68,10 +69,22 @@ def capture_and_identify_faces():
             matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.6)
             name = "Desconhecido"
 
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S")  # Data e hora atual
+
             if True in matches:
                 # Encontrar o índice do rosto correspondente
                 match_index = matches.index(True)
                 name = known_names[match_index]
+
+                recognition_log[name].append(current_time)
+
+                print(f"[{current_time}] Pessoa reconhecida: {name}")
+                print(f"Reconhecimentos de {name}: {recognition_log[name]}")
+
+            else:
+                print(f"[{current_time}] Rosto desconhecido")
+
+
 
             # Desenhar o nome e o bounding box no frame
             top, right, bottom, left = face_location
@@ -103,6 +116,11 @@ def capture_and_identify_faces():
 
     video.release()
     cv2.destroyAllWindows()
+    
+    # Exibir o log completo no final
+    print("\nLog de reconhecimentos:")
+    for person, timestamps in recognition_log.items():
+        print(f"{person}: {timestamps}")
 
 
 # Execução principal
