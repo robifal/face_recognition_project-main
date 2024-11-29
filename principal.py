@@ -19,6 +19,7 @@ def load_known_faces():
     for filename in os.listdir(KNOWN_FACES_DIR):
         if filename.endswith('.jpg'):
             name = filename.split('_')[0]  # Nome antes do "_X.jpg"
+            name = os.path.splitext(name)[0]  # Remover a extensão .jpg do nome
             img_path = os.path.join(KNOWN_FACES_DIR, filename)
             # Carregar imagem e calcular as "encodings"
             image = face_recognition.load_image_file(img_path)
