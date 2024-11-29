@@ -2,6 +2,7 @@ import os
 import cv2
 import face_recognition
 import numpy as np
+import datetime
 
 # Configuração dos diretórios
 KNOWN_FACES_DIR = 'data/known_faces'
