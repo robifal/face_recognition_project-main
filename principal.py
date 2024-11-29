@@ -3,13 +3,14 @@ import cv2
 import face_recognition
 import numpy as np
 import datetime
+import json
 
 # Configuração dos diretórios
 KNOWN_FACES_DIR = 'data/known_faces'
+RECOGNITION_LOG_FILE = 'recognition_log.json'
 
 if not os.path.exists(KNOWN_FACES_DIR):
     os.makedirs(KNOWN_FACES_DIR)
-
 
 # Função para carregar rostos conhecidos
 def load_known_faces():
@@ -40,6 +41,18 @@ def create_panel(frame, name):
         return panel
     return frame
 
+# Função para carregar o histórico de reconhecimentos
+def load_recognition_log():
+    if os.path.exists(RECOGNITION_LOG_FILE):
+        with open(RECOGNITION_LOG_FILE, 'r') as file:
+            return json.load(file)
+    return {}
+
+# Função para salvar o histórico de reconhecimentos
+def save_recognition_log(recognition_log):
+    with open(RECOGNITION_LOG_FILE, 'w') as file:
+        json.dump(recognition_log, file, indent=4)
+
 # Função para capturar e identificar rostos
 def capture_and_identify_faces():
     video = cv2.VideoCapture(0)
@@ -49,6 +62,12 @@ def capture_and_identify_faces():
 
     # Carrega os rostos conhecidos
     known_faces, known_names = load_known_faces()
+
+    # Carrega o histórico de reconhecimentos
+    recognition_log = load_recognition_log()
+
+    # Dicionário para rastrear o último reconhecimento de cada rosto
+    last_recognized = {}
 
     while True:
         ret, frame = video.read()
@@ -65,7 +84,7 @@ def capture_and_identify_faces():
 
         for face_encoding, face_location in zip(face_encodings, face_locations):
             # Comparação com rostos conhecidos
-            matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.6)
+            matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.5)
             name = "Desconhecido"
 
             if True in matches:
@@ -81,6 +100,27 @@ def capture_and_identify_faces():
 
             frame = create_panel(frame, name)
 
+            # Se a pessoa for reconhecida (não for "Desconhecido")
+            if name != "Desconhecido":
+                now = datetime.datetime.now()
+                current_time = now.strftime("%Y-%m-%d %H:%M:%S")
+
+                # Verifica se já foi registrada anteriormente
+                if name in recognition_log:
+                    # Obter o tempo do último reconhecimento registrado
+                    last_time_str = recognition_log[name][-1]
+                    last_time = datetime.datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
+
+                    # Verificar se já se passaram 60 segundos
+                    time_diff = now - last_time
+                    if time_diff.total_seconds() >= 60:
+                        recognition_log[name].append(current_time)
+                        print(f"{name} reconhecido novamente às {current_time}")
+                else:
+                    # Se for a primeira vez que é reconhecida, registra
+                    recognition_log[name] = [current_time]
+                    print(f"{name} reconhecido pela primeira vez às {current_time}")
+
         # Exibe o frame
         cv2.imshow("Reconhecimento Facial", frame)
 
@@ -88,9 +128,11 @@ def capture_and_identify_faces():
         if cv2.waitKey(1) == ord('q'):
             break
 
+    # Salva o histórico de reconhecimentos no arquivo JSON
+    save_recognition_log(recognition_log)
+
     video.release()
     cv2.destroyAllWindows()
-
 
 # Execução principal
 if __name__ == "__main__":
