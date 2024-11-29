@@ -2,6 +2,7 @@ import os
 import cv2
 import face_recognition
 import numpy as np
+import time
 
 # Configuração dos diretórios
 KNOWN_FACES_DIR = 'data/known_faces'
@@ -77,6 +78,19 @@ def capture_and_identify_faces():
             color = (0, 255, 0) if name != "Desconhecido" else (0, 0, 255)
             cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
             cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+
+            
+
+            if True in matches:
+                match_index = matches.index(True)
+                name = known_names[match_index]
+                current_time = time.strftime("%Y-%m-%d %H:%M:%S")  # Formato: Ano-Mês-Dia Hora:Minuto:Segundo
+                print(f"[{current_time}] Pessoa reconhecida: {name}")
+            else:
+                current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[{current_time}] Rosto desconhecido")
+
+            
 
             frame = create_panel(frame, name)
 
