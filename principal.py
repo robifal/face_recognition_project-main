@@ -130,7 +130,6 @@ def capture_and_identify_faces():
         # Parar o loop ao pressionar 'q'
         if cv2.waitKey(1) == ord('q'):
             break
-  
     
     video.release()
     cv2.destroyAllWindows()
