@@ -124,14 +124,13 @@ def capture_and_identify_faces():
 
         # Exibe o frame
         cv2.imshow("Reconhecimento Facial", frame)
+        save_recognition_log(recognition_log) # Salva o histórico de reconhecimentos no arquivo JSON
+
 
         # Parar o loop ao pressionar 'q'
         if cv2.waitKey(1) == ord('q'):
-            break
-
-    # Salva o histórico de reconhecimentos no arquivo JSON
-    save_recognition_log(recognition_log)
-
+            break  
+    
     video.release()
     cv2.destroyAllWindows()
 
