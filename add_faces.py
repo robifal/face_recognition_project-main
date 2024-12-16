@@ -80,6 +80,12 @@ def capture_faces_for_person(name):
                 print("Rosto já registrado. Ignorando.")
                 continue
 
+            if face_image.size > 0:
+                face_image = cv2.resize(face_image, (150, 150))  # Redimensiona para tamanho fixo
+                face_image = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)  # Converte para escala de cinza (opcional)
+                cv2.imwrite(filename, face_image)
+                print(f"Foto {photo_count} salva para {name}.")
+
             # Salva a imagem do rosto
             face_image = frame[top:bottom, left:right]
             filename = os.path.join(KNOWN_FACES_DIR, f"{name}_{photo_count}.jpg")

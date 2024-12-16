@@ -85,7 +85,7 @@ def capture_and_identify_faces():
 
         for face_encoding, face_location in zip(face_encodings, face_locations):
             # Comparação com rostos conhecidos
-            matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.5)
+            matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.4)
             name = "Desconhecido"
 
             if True in matches:
