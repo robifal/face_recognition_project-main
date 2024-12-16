@@ -31,7 +31,7 @@ def carregar_faces_registradas():
     return registered_encodings
 
 # Verifica se a face já está registrada
-def is_face_registered(new_face_encoding, registered_encodings, tolerance=0.6):
+def is_face_registered(new_face_encoding, registered_encodings, tolerance=0.5):
     """Verifica se a face já está registrada no sistema."""
     for registered_encoding in registered_encodings.values():
         match = face_recognition.compare_faces([registered_encoding], new_face_encoding, tolerance)
@@ -47,9 +47,9 @@ def capture_faces_for_person(name):
         print("Erro: Não foi possível acessar a câmera.")
         return
 
-    # Definir a resolução desejada da câmera (por exemplo, 1280x720)
-    video.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    video.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    # Definir a resolução desejada da câmera (por exemplo, 1920x1080)
+    video.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    video.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     photo_count = 0
     registered_encodings = carregar_faces_registradas()
@@ -60,36 +60,41 @@ def capture_faces_for_person(name):
             print("Falha ao capturar o vídeo")
             break
 
-        # Reduz a resolução da imagem para acelerar a detecção
-        small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)  # Reduz 50% da resolução para detectar rostos rapidamente
-        rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        # Convertendo a imagem para RGB para a detecção de rostos
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         # Detecta rostos
-        face_locations = face_recognition.face_locations(rgb_small_frame)
-        face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+        face_locations = face_recognition.face_locations(rgb_frame)
+        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
         for face_location, face_encoding in zip(face_locations, face_encodings):
-            # Converte coordenadas para a escala original
-            top, right, bottom, left = [int(coord * 2) for coord in face_location]  # Multiplica por 2 devido ao redimensionamento
+            # Converte as coordenadas para a escala original
+            top, right, bottom, left = face_location
 
             # Desenha o retângulo ao redor da face detectada
-            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)  # Verde com espessura de 2
+            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
 
             # Verifica se a face já está registrada
             if is_face_registered(face_encoding, registered_encodings):
                 print("Rosto já registrado. Ignorando.")
                 continue
 
-            if face_image.size > 0:
-                face_image = cv2.resize(face_image, (150, 150))  # Redimensiona para tamanho fixo
-                face_image = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)  # Converte para escala de cinza (opcional)
-                cv2.imwrite(filename, face_image)
-                print(f"Foto {photo_count} salva para {name}.")
-
-            # Salva a imagem do rosto
+            # Recorta a imagem do rosto
             face_image = frame[top:bottom, left:right]
+
+            # Aplicar pré-processamento
+            # 1. Converter para escala de cinza (opcional)
+            face_image_gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
+
+            # 2. Equalizar histograma
+            face_image_equalized = cv2.equalizeHist(face_image_gray)
+
+            # 3. Redimensionar para o tamanho padrão
+            face_image_resized = cv2.resize(face_image_equalized, (150, 150))
+
+            # Salvar a imagem processada
             filename = os.path.join(KNOWN_FACES_DIR, f"{name}_{photo_count}.jpg")
-            cv2.imwrite(filename, face_image)
+            cv2.imwrite(filename, face_image_resized)
             photo_count += 1
             print(f"Foto {photo_count} salva para {name}.")
 
