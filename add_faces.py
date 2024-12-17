@@ -109,7 +109,6 @@ def capture_faces_for_person(name):
     cv2.destroyAllWindows()
     print(f"Captura concluída para {name}. {photo_count} fotos salvas.")
 
-
 # Execução principal
 if __name__ == "__main__":
     if not testar_camera():

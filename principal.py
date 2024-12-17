@@ -85,13 +85,13 @@ def capture_and_identify_faces():
 
         for face_encoding, face_location in zip(face_encodings, face_locations):
             # Comparação com rostos conhecidos
-            matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.5)
-            name = "Desconhecido"
+            face_distances = face_recognition.face_distance(known_faces, face_encoding)
+            best_match_index = np.argmin(face_distances)
 
-            if True in matches:
-                # Encontrar o índice do rosto correspondente
-                match_index = matches.index(True)
-                name = known_names[match_index]
+            if face_distances[best_match_index] < 0.5:  # Limite ajustável
+                name = known_names[best_match_index]
+            else:
+                name = "Desconhecido"
 
             # Desenhar o nome e o bounding box no frame
             top, right, bottom, left = face_location
