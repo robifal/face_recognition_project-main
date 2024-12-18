@@ -1,35 +1,34 @@
-import cv2
 import os
-import numpy as np
+import cv2
 import face_recognition
-import mediapipe as mp
+import numpy as np
+import datetime
+import json
 
 # Configuração dos diretórios
 KNOWN_FACES_DIR = 'data/known_faces'
+RECOGNITION_LOG_FILE = 'recognition_log.json'
 
 if not os.path.exists(KNOWN_FACES_DIR):
     os.makedirs(KNOWN_FACES_DIR)
 
-# Função para carregar os rostos conhecidos e suas características faciais
+# Função para carregar rostos conhecidos
 def load_known_faces():
-    known_faces = {}
+    known_faces = []
+    known_names = []
     for filename in os.listdir(KNOWN_FACES_DIR):
         if filename.endswith('.jpg'):
             name = filename.split('_')[0]  # Nome antes do "_X.jpg"
+            name = os.path.splitext(name)[0]  # Remover a extensão .jpg do nome
             img_path = os.path.join(KNOWN_FACES_DIR, filename)
-            img = cv2.imread(img_path)
+            # Carregar imagem e calcular as "encodings"
+            image = face_recognition.load_image_file(img_path)
+            encodings = face_recognition.face_encodings(image)
+            if encodings:  # Verifica se encontrou um rosto
+                known_faces.append(encodings[0])
+                known_names.append(name)
+    return known_faces, known_names
 
-            # Usando face_recognition para encontrar as características faciais
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            face_encodings = face_recognition.face_encodings(img_rgb)
-
-            if face_encodings:
-                known_faces[name] = face_encodings[0]  # Usando a primeira face encontrada
-            else:
-                print(f"Não foi possível encontrar um rosto em {filename}.")
-    return known_faces
-
-# Função para criar o painel com o feed da câmera e a foto identificada
 def create_panel(frame, name):
     person_image_path = os.path.join(KNOWN_FACES_DIR, f"{name}.jpg")
     if os.path.exists(person_image_path):
@@ -43,103 +42,93 @@ def create_panel(frame, name):
         return panel
     return frame
 
-# Função para capturar e processar os frames
+# Função para carregar o histórico de reconhecimentos
+def load_recognition_log():
+    if os.path.exists(RECOGNITION_LOG_FILE):
+        with open(RECOGNITION_LOG_FILE, 'r') as file:
+            return json.load(file)
+    return {}
+
+# Função para salvar o histórico de reconhecimentos
+def save_recognition_log(recognition_log):
+    with open(RECOGNITION_LOG_FILE, 'w') as file:
+        json.dump(recognition_log, file, indent=4)
+
+# Função para capturar e identificar rostos
 def capture_and_identify_faces():
-    video = cv2.VideoCapture("/dev/video0")  # Aqui você usa o dispositivo de captura já configurado com ffmpeg
+    video = cv2.VideoCapture(0)
     if not video.isOpened():
-        print("Erro ao acessar a câmera")
+        print("Erro: Não foi possível acessar a câmera.")
         return
 
     # Carrega os rostos conhecidos
-    known_faces = load_known_faces()
+    known_faces, known_names = load_known_faces()
 
-    # Criação do detector de faces com MediaPipe
-    mp_face_detection = mp.solutions.face_detection
-    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
-        while True:
-            ret, frame = video.read()
-            if not ret:
-                print("Falha ao capturar o vídeo")
-                break
+    # Carrega o histórico de reconhecimentos
+    recognition_log = load_recognition_log()
 
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = face_detection.process(rgb_frame)
+    while True:
+        ret, frame = video.read()
+        if not ret:
+            print("Falha ao capturar o vídeo")
+            break
 
-            if results.detections:
-                for detection in results.detections:
-                    # Obtém as coordenadas da face
-                    bboxC = detection.location_data.relative_bounding_box
-                    h, w, _ = frame.shape
-                    x, y, w_box, h_box = int(bboxC.xmin * w), int(bboxC.ymin * h), int(bboxC.width * w), int(bboxC.height * h)
-                    x, y = max(x, 0), max(y, 0)
-                    w_box, h_box = min(w_box, w - x), min(h_box, h - y)
+        # Convertendo para RGB (necessário para face_recognition)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                    # Recorte do rosto
-                    crop_img = frame[y:y + h_box, x:x + w_box]
-                    if crop_img.size == 0:
-                        continue
+        # Localiza rostos no frame
+        face_locations = face_recognition.face_locations(rgb_frame, model='cnn')
+        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
-                    # Usando face_recognition para extrair as características faciais
-                    rgb_crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
-                    face_encodings = face_recognition.face_encodings(rgb_crop_img)
+        for face_encoding, face_location in zip(face_encodings, face_locations):
+            # Comparação com rostos conhecidos
+            face_distances = face_recognition.face_distance(known_faces, face_encoding)
+            best_match_index = np.argmin(face_distances)
 
-                    if face_encodings:
-                        captured_face_encoding = face_encodings[0]
+            if face_distances[best_match_index] < 0.5:  # Limite ajustável
+                name = known_names[best_match_index]
+            else:
+                name = "Desconhecido"
 
-                        # Comparar com rostos conhecidos usando a distância cosseno
-                        min_distance = float('inf')
-                        name = "Desconhecido"
-                        for known_name, known_face_encoding in known_faces.items():
-                            distance = np.linalg.norm(known_face_encoding - captured_face_encoding)
-                            if distance < min_distance:
-                                min_distance = distance
-                                name = known_name
+            # Desenhar o nome e o bounding box no frame
+            top, right, bottom, left = face_location
+            color = (0, 255, 0) if name != "Desconhecido" else (0, 0, 255)
+            cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+            cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
-                        # Se o rosto for desconhecido
-                        if min_distance > 0.6:  # Ajuste do limite de distância
-                            name = "Desconhecido"
+            frame = create_panel(frame, name)
 
-                        color = (0, 255, 0) if name != "Desconhecido" else (0, 0, 255)
+            # Se a pessoa for reconhecida (não for "Desconhecido")
+            if name != "Desconhecido":
+                now = datetime.datetime.now()
+                current_time = now.strftime("%Y-%m-%d %H:%M:%S")
 
-                        # Define a posição do texto (abaixo do rosto)
-                        text = f"Nome: {name}"
-                        (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_COMPLEX, 1, 1)
-                        text_x, text_y = x, y + h_box + text_height + 10  # Ajuste o deslocamento conforme necessário
+                # Verifica se já foi registrada anteriormente
+                if name in recognition_log:
+                    # Obter o tempo do último reconhecimento registrado
+                    last_time_str = recognition_log[name][-1]
+                    last_time = datetime.datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
 
-                        # Desenha a caixinha (fundo para o texto)
-                        cv2.rectangle(
-                            frame, 
-                            (text_x - 5, text_y - text_height - 5),  # Posição superior esquerda
-                            (text_x + text_width + 5, text_y + 5),  # Posição inferior direita
-                            color, 
-                            cv2.FILLED
-                        )
+                    # Verificar se já se passaram 60 segundos
+                    time_diff = now - last_time
+                    if time_diff.total_seconds() >= 60:
+                        recognition_log[name].append(current_time)
+                        print(f"{name} reconhecido novamente às {current_time}")
+                else:
+                    # Se for a primeira vez que é reconhecida, registra
+                    recognition_log[name] = [current_time]
+                    print(f"{name} reconhecido pela primeira vez às {current_time}")
 
-                        # Desenha o texto em cima da caixinha
-                        cv2.putText(
-                            frame, 
-                            text, 
-                            (text_x, text_y), 
-                            cv2.FONT_HERSHEY_COMPLEX, 
-                            1, 
-                            (255, 255, 255),  # Cor do texto
-                            1
-                        )
+        # Exibe o frame
+        cv2.imshow("Reconhecimento Facial", frame)
+        save_recognition_log(recognition_log) # Salva o histórico de reconhecimentos no arquivo JSON
 
-                        # Desenha o retângulo em volta do rosto
-                        cv2.rectangle(frame, (x, y), (x + w_box, y + h_box), color, 2)
-
-                        # Cria o painel com a foto da pessoa ao lado
-                frame = create_panel(frame, name)
-
-            # Exibe o frame
-            cv2.imshow("Frame", frame)
-
-            if cv2.waitKey(1) == ord('q'):
-                break
-
-        video.release()
-        cv2.destroyAllWindows()
+        # Parar o loop ao pressionar 'q'
+        if cv2.waitKey(1) == ord('q'):
+            break  
+    
+    video.release()
+    cv2.destroyAllWindows()
 
 # Execução principal
 if __name__ == "__main__":

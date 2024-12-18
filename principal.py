@@ -67,9 +67,6 @@ def capture_and_identify_faces():
     # Carrega o histórico de reconhecimentos
     recognition_log = load_recognition_log()
 
-    # Dicionário para rastrear o último reconhecimento de cada rosto
-    last_recognized = {}
-
     while True:
         ret, frame = video.read()
         if not ret:
@@ -80,18 +77,18 @@ def capture_and_identify_faces():
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         # Localiza rostos no frame
-        face_locations = face_recognition.face_locations(rgb_frame)
+        face_locations = face_recognition.face_locations(rgb_frame, model='cnn')
         face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
         for face_encoding, face_location in zip(face_encodings, face_locations):
             # Comparação com rostos conhecidos
-            matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.5)
-            name = "Desconhecido"
+            face_distances = face_recognition.face_distance(known_faces, face_encoding)
+            best_match_index = np.argmin(face_distances)
 
-            if True in matches:
-                # Encontrar o índice do rosto correspondente
-                match_index = matches.index(True)
-                name = known_names[match_index]
+            if face_distances[best_match_index] < 0.5:  # Limite ajustável
+                name = known_names[best_match_index]
+            else:
+                name = "Desconhecido"
 
             # Desenhar o nome e o bounding box no frame
             top, right, bottom, left = face_location
@@ -125,7 +122,6 @@ def capture_and_identify_faces():
         # Exibe o frame
         cv2.imshow("Reconhecimento Facial", frame)
         save_recognition_log(recognition_log) # Salva o histórico de reconhecimentos no arquivo JSON
-
 
         # Parar o loop ao pressionar 'q'
         if cv2.waitKey(1) == ord('q'):
