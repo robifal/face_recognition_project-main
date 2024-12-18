@@ -11,7 +11,7 @@ KNOWN_FACES_DIR = 'data/known_faces'
 RECOGNITION_LOG_FILE = 'recognition_log.json'
 
 if not os.path.exists(KNOWN_FACES_DIR):
-    os.makedirs(KNOWN_FACES_DIR)
+    os.makedirs(KNOWN_FACES_DIR)    
 
 # Função para carregar rostos conhecidos
 def load_known_faces():
@@ -30,7 +30,7 @@ def load_known_faces():
                 known_names.append(name)
     return known_faces, known_names
 
-def create_panel(frame, name):
+def create_panel(frame, name, accuracy=None):
     person_image_path = os.path.join(KNOWN_FACES_DIR, f"{name}.jpg")
     if os.path.exists(person_image_path):
         person_image = cv2.imread(person_image_path)
@@ -40,6 +40,11 @@ def create_panel(frame, name):
         panel = np.zeros((panel_height, panel_width, 3), dtype=np.uint8)
         panel[:frame.shape[0], :frame.shape[1]] = frame
         panel[:200, frame.shape[1]:] = person_image
+        
+        # Adicionar o indicador de precisão, se fornecido
+        if accuracy is not None:
+            cv2.putText(panel, f"Precisão: {accuracy:.2f}%", (frame.shape[1] + 10, 40), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         return panel
     return frame
 
@@ -65,13 +70,23 @@ def process_frame(frame, known_faces, known_names, recognition_log):
 
     for face_encoding, face_location in zip(face_encodings, face_locations):
         # Comparação com rostos conhecidos
-        matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.5)
+        matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.4)  # Mais rígido
         name = "Desconhecido"
+        accuracy = None
 
         if True in matches:
             # Encontrar o índice do rosto correspondente
             match_index = matches.index(True)
             name = known_names[match_index]
+
+            # Calcular a precisão (distância) entre os rostos
+            face_distances = face_recognition.face_distance([known_faces[match_index]], face_encoding)
+            accuracy = (1 - face_distances[0]) * 100  # A precisão é inversamente proporcional à distância
+            
+            # Se a precisão for muito baixa, marcar como "Desconhecido"
+            if accuracy < 60:  # Limite de precisão abaixo do qual não é considerado válido
+                name = "Desconhecido"
+                accuracy = None
 
         # Desenhar o nome e o bounding box no frame
         top, right, bottom, left = face_location
@@ -79,7 +94,7 @@ def process_frame(frame, known_faces, known_names, recognition_log):
         cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
         cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
-        frame = create_panel(frame, name)
+        frame = create_panel(frame, name, accuracy)
 
         # Registro de reconhecimento
         if name != "Desconhecido":
@@ -96,11 +111,11 @@ def process_frame(frame, known_faces, known_names, recognition_log):
                 time_diff = now - last_time
                 if time_diff.total_seconds() >= 60:
                     recognition_log[name].append(current_time)
-                    print(f"{name} reconhecido novamente às {current_time}")
+                    print(f"{name} reconhecido novamente às {current_time} com {accuracy:.2f}% de precisão")
             else:
                 # Se for a primeira vez que é reconhecida, registra
                 recognition_log[name] = [current_time]
-                print(f"{name} reconhecido pela primeira vez às {current_time}")
+                print(f"{name} reconhecido pela primeira vez às {current_time} com {accuracy:.2f}% de precisão")
     return frame
 
 # Função para capturar e identificar rostos
