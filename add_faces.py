@@ -86,11 +86,8 @@ def capture_faces_for_person(name):
             # 1. Converter para escala de cinza (opcional)
             face_image_gray = cv2.cvtColor(face_image, cv2.COLOR_BGR2GRAY)
 
-            # 2. Equalizar histograma
-            face_image_equalized = cv2.equalizeHist(face_image_gray)
-
             # 3. Redimensionar para o tamanho padrão
-            face_image_resized = cv2.resize(face_image_equalized, (150, 150))
+            face_image_resized = cv2.resize(face_image_gray, (150, 150))
 
             # Salvar a imagem processada
             filename = os.path.join(KNOWN_FACES_DIR, f"{name}_{photo_count}.jpg")
@@ -108,7 +105,6 @@ def capture_faces_for_person(name):
     video.release()
     cv2.destroyAllWindows()
     print(f"Captura concluída para {name}. {photo_count} fotos salvas.")
-
 
 # Execução principal
 if __name__ == "__main__":
