@@ -4,6 +4,7 @@ import face_recognition
 import numpy as np
 import datetime
 import json
+import threading
 
 # Configuração dos diretórios
 KNOWN_FACES_DIR = 'data/known_faces'
@@ -54,11 +55,60 @@ def save_recognition_log(recognition_log):
     with open(RECOGNITION_LOG_FILE, 'w') as file:
         json.dump(recognition_log, file, indent=4)
 
+# Função para processar reconhecimento facial
+def process_frame(frame, known_faces, known_names, recognition_log):
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    
+    # Localiza rostos no frame
+    face_locations = face_recognition.face_locations(rgb_frame)
+    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+
+    for face_encoding, face_location in zip(face_encodings, face_locations):
+        # Comparação com rostos conhecidos
+        matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.5)
+        name = "Desconhecido"
+
+        if True in matches:
+            # Encontrar o índice do rosto correspondente
+            match_index = matches.index(True)
+            name = known_names[match_index]
+
+        # Desenhar o nome e o bounding box no frame
+        top, right, bottom, left = face_location
+        color = (0, 255, 0) if name != "Desconhecido" else (0, 0, 255)
+        cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+        cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+
+        frame = create_panel(frame, name)
+
+        # Registro de reconhecimento
+        if name != "Desconhecido":
+            now = datetime.datetime.now()
+            current_time = now.strftime("%Y-%m-%d %H:%M:%S")
+
+            # Verifica se já foi registrada anteriormente
+            if name in recognition_log:
+                # Obter o tempo do último reconhecimento registrado
+                last_time_str = recognition_log[name][-1]
+                last_time = datetime.datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
+
+                # Verificar se já se passaram 60 segundos
+                time_diff = now - last_time
+                if time_diff.total_seconds() >= 60:
+                    recognition_log[name].append(current_time)
+                    print(f"{name} reconhecido novamente às {current_time}")
+            else:
+                # Se for a primeira vez que é reconhecida, registra
+                recognition_log[name] = [current_time]
+                print(f"{name} reconhecido pela primeira vez às {current_time}")
+    return frame
+
 # Função para capturar e identificar rostos
 def capture_and_identify_faces():
-    video = cv2.VideoCapture(0)
-    if not video.isOpened():
-        print("Erro: Não foi possível acessar a câmera.")
+    cap = cv2.VideoCapture("rtsp://ulisses:@dev2024@10.1.66.218:554/cam/realmonitor?channel=1&subtype=0")
+
+    if not cap.isOpened():
+        print("Erro: Não foi possível acessar o stream da câmera.")
         return
 
     # Carrega os rostos conhecidos
@@ -67,71 +117,28 @@ def capture_and_identify_faces():
     # Carrega o histórico de reconhecimentos
     recognition_log = load_recognition_log()
 
-    # Dicionário para rastrear o último reconhecimento de cada rosto
-    last_recognized = {}
-
     while True:
-        ret, frame = video.read()
+        ret, frame = cap.read()
         if not ret:
             print("Falha ao capturar o vídeo")
             break
 
-        # Convertendo para RGB (necessário para face_recognition)
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Reduz a resolução para processamento, mantendo o stream em alta qualidade
+        small_frame = cv2.resize(frame, (620, 420))
 
-        # Localiza rostos no frame
-        face_locations = face_recognition.face_locations(rgb_frame)
-        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+        # Processar o reconhecimento facial de forma assíncrona
+        processed_frame = threading.Thread(target=process_frame, args=(small_frame, known_faces, known_names, recognition_log))
+        processed_frame.start()
 
-        for face_encoding, face_location in zip(face_encodings, face_locations):
-            # Comparação com rostos conhecidos
-            matches = face_recognition.compare_faces(known_faces, face_encoding, tolerance=0.5)
-            name = "Desconhecido"
-
-            if True in matches:
-                # Encontrar o índice do rosto correspondente
-                match_index = matches.index(True)
-                name = known_names[match_index]
-
-            # Desenhar o nome e o bounding box no frame
-            top, right, bottom, left = face_location
-            color = (0, 255, 0) if name != "Desconhecido" else (0, 0, 255)
-            cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-            cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-
-            frame = create_panel(frame, name)
-
-            # Se a pessoa for reconhecida (não for "Desconhecido")
-            if name != "Desconhecido":
-                now = datetime.datetime.now()
-                current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-
-                # Verifica se já foi registrada anteriormente
-                if name in recognition_log:
-                    # Obter o tempo do último reconhecimento registrado
-                    last_time_str = recognition_log[name][-1]
-                    last_time = datetime.datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
-
-                    # Verificar se já se passaram 60 segundos
-                    time_diff = now - last_time
-                    if time_diff.total_seconds() >= 60:
-                        recognition_log[name].append(current_time)
-                        print(f"{name} reconhecido novamente às {current_time}")
-                else:
-                    # Se for a primeira vez que é reconhecida, registra
-                    recognition_log[name] = [current_time]
-                    print(f"{name} reconhecido pela primeira vez às {current_time}")
-
-        # Exibe o frame
+        # Exibe o frame original
         cv2.imshow("Reconhecimento Facial", frame)
-        save_recognition_log(recognition_log) # Salva o histórico de reconhecimentos no arquivo JSON
-
+        save_recognition_log(recognition_log)  # Salva o histórico de reconhecimentos no arquivo JSON
 
         # Parar o loop ao pressionar 'q'
         if cv2.waitKey(1) == ord('q'):
             break
-    
-    video.release()
+
+    cap.release()
     cv2.destroyAllWindows()
 
 # Execução principal
