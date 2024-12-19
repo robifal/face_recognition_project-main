@@ -1,4 +1,5 @@
 import os
+os.environ["QT_QPA_PLATFORM"] = "xcb"
 import cv2
 import face_recognition
 import numpy as np
