@@ -1,5 +1,4 @@
 import os
-os.environ["QT_QPA_PLATFORM"] = "xcb"
 import cv2
 import face_recognition
 import numpy as np
@@ -12,7 +11,7 @@ KNOWN_FACES_DIR = 'data/known_faces'
 RECOGNITION_LOG_FILE = 'recognition_log.json'
 
 if not os.path.exists(KNOWN_FACES_DIR):
-    os.makedirs(KNOWN_FACES_DIR)    
+    os.makedirs(KNOWN_FACES_DIR)
 
 # Função para carregar rostos conhecidos
 def load_known_faces():
